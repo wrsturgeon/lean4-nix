@@ -4,6 +4,7 @@
   stdenv,
   lean,
 }: let
+  defaultLakeFlags = ["--verbose" "--log-level=info" "--no-ansi"];
   capitalize = s: let
     first = lib.toUpper (builtins.substring 0 1 s);
     rest = builtins.substring 1 (-1) s;
@@ -23,10 +24,13 @@
     deps ? {},
     # Whether to build `shared` and `static` facets of a library target.
     buildLibrary ? false,
+    # Flags passed to Lake before the `build` subcommand
+    lakeFlags ? defaultLakeFlags,
     # Whether to export `.lake` artifacts and source for incremental builds
     installArtifacts ? true,
     ...
   }: let
+    lakeWithFlags = lib.escapeShellArgs (["lake"] ++ lakeFlags);
     manifest = importLakeManifest "${src}/lake-manifest.json";
     # Creates a surrogate manifest with paths to local shadow directories.
     # These shadow directories symlink source files from the Nix store.
@@ -74,10 +78,10 @@
         # NOTE: We assume most projects have the same name for the package and default library, where the latter is capitalized (e.g. `aesop` and `Aesop`, `batteries` and `Batteries`). If this is not the case, the user can provide their own `buildPhase` either in a `depOverride` for `buildDeps` or directly as an argument to in `mkPackage`. If there are multiple libraries used from the package, the user can provide a `preBuild` or `postBuild` hook to build the requisite `shared`/`static` facets
         buildPhase = ''
           runHook preBuild
-          lake build ${name}
+          ${lakeWithFlags} build ${name}
           ${lib.optionalString buildLibrary ''
-            lake build ${capitalize name}:shared
-            lake build ${capitalize name}:static
+            ${lakeWithFlags} build ${capitalize name}:shared
+            ${lakeWithFlags} build ${capitalize name}:static
           ''}
           runHook postBuild
         '';
@@ -96,7 +100,7 @@
         '';
       }
       # Prevents implicit arguments from being coerced to input strings in `mkDerivation`
-      // (builtins.removeAttrs args ["deps" "depOverride" "depOverrideDeriv" "lakeDeps" "lakeArtifacts"])
+      // (builtins.removeAttrs args ["deps" "depOverride" "depOverrideDeriv" "lakeDeps" "lakeArtifacts" "lakeFlags"])
     );
 
   # Builds only the dependencies of a Lake package based on its `lake-manifest.json` file. Returns an attr set of package derivations
@@ -105,6 +109,8 @@
     src,
     # Path to the `lake-manifest.json` file
     manifestFile ? "${src}/lake-manifest.json",
+    # Flags passed to Lake for every dependency build
+    lakeFlags ? defaultLakeFlags,
     # Override derivation args in dependencies
     depOverride ? {},
     # Override derivation entirely in dependencies
@@ -154,6 +160,7 @@
                   value = manifestDeps.${name};
                 })
                 flatDeps.${info.name});
+              inherit lakeFlags;
               buildLibrary = true;
             }
             // (depOverride.${info.name} or {})));

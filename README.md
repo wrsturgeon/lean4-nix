@@ -124,6 +124,7 @@ derivations for each dependency. It takes the following arguments:
 
 - `src`: The source directory
 - `manifestFile ? ${src}/lake-manifest.json`: Path to the manifest file
+- `lakeFlags ? ["--verbose" "--log-level=info" "--no-ansi"]`: Flags passed to all `lake` invocations
 - `depOverride ? {}`: Attr set of any custom arguments to use when building a
   given dependency, such as `buildPhase` or `preConfigure`.
 - `depOverrideDeriv ? {}`: Attr set of derivations to use instead of building dependencies
@@ -134,6 +135,7 @@ output is a derivation. It takes the following arguments:
 
 - `name`: The name of the desired target to build
 - `src`: The source directory name from `manifestFile`
+- `lakeFlags ? ["--verbose" "--log-level=info" "--no-ansi"]`: Flags passed to all `lake` invocations
 - `staticLibDeps ? []`: List of static libraries to link with.
 - `lakeDeps`: If provided, use these dependencies instead of calling `buildDeps` internally
 - `lakeArtifacts`: If provided, copy the `.lake` artifacts from another
