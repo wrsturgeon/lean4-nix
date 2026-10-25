@@ -119,19 +119,43 @@
   }: let
     manifest = importLakeManifest manifestFile;
 
-    # Fetches the Git source of each dependency in the manifest, accounting for subDir
+    manifestRepos = builtins.listToAttrs (map (info: {
+        inherit (info) name;
+        value = fetchGit {
+          inherit (info) rev url;
+          shallow = true;
+        };
+      })
+      (builtins.filter (info: info.type == "git") manifest.packages));
+
+    # Fetches the source of each dependency in the manifest, accounting for subDir
     depSources = builtins.listToAttrs (builtins.map (info: {
         inherit (info) name;
-        value = let
-          repo = builtins.fetchGit {
-            inherit (info) url rev;
-            shallow = true;
-          };
-          subDir = info.subDir or null;
-        in
-          if subDir != null
-          then "${repo}/${subDir}"
-          else repo;
+        value =
+          if info.type == "git"
+          then let
+            repo = manifestRepos.${info.name};
+            subDir = info.subDir or null;
+          in
+            if subDir != null
+            then "${repo}/${subDir}"
+            else repo
+          else if info.type == "path"
+          then
+            if lib.strings.hasPrefix ".lake/packages/" info.dir
+            then let
+              pathComponents = lib.path.subpath.components info.dir;
+              lakePackagesPrefix = lib.path.subpath.components ".lake/packages";
+              underLakePackages = lib.lists.hasPrefix lakePackagesPrefix pathComponents;
+              pathComponentsUnderLakePackages = lib.lists.drop 2 pathComponents;
+              packageName = builtins.head pathComponentsUnderLakePackages;
+              pathUnderPackage = builtins.tail pathComponentsUnderLakePackages;
+            in
+              if underLakePackages
+              then "${manifestRepos.${packageName}}/${lib.path.subpath.join pathUnderPackage}"
+              else throw "unknown Lake package path ${builtins.toJSON info.dir} in ${builtins.toJSON info}"
+            else "${src}/${info.dir}"
+          else throw "unknown Lake package type ${builtins.toJSON info.type} in ${builtins.toJSON info}";
       })
       manifest.packages);
 
@@ -153,7 +177,7 @@
           depOverrideDeriv.${
             info.name
           } or (mkLakeDerivation ({
-              inherit (info) name url;
+              inherit (info) name;
               src = depSources.${info.name};
               deps = builtins.listToAttrs (builtins.map (name: {
                   inherit name;
